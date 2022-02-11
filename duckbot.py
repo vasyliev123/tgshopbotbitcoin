@@ -113,5 +113,9 @@ def factory(cfg: nuconfig.NuConfig):
             return self.bot.send_document(*args, **kwargs)
 
         # More methods can be added here
+        @catch_telegram_errors
+        def send_message_markdown(self, *args, **kwargs):
+            # Send message in markdown parse mode
+            return self.bot.send_message(parse_mode="Markdown", *args, **kwargs)
 
     return DuckBot
