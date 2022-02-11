@@ -9,7 +9,7 @@ import telegram
 import database
 import duckbot
 import localization
-import nuconfig
+import configloader
 import worker
 
 try:
@@ -25,45 +25,13 @@ def main():
 
     # Start logging setup
     log = logging.getLogger("core")
-    logging.root.setLevel("INFO")
-    log.debug("Set logging level to INFO while the config is being loaded")
-
-    # Ensure the template config file exists
-    if not os.path.isfile("config/template_config.toml"):
-        log.fatal("config/template_config.toml does not exist!")
-        exit(254)
-
-    # If the config file does not exist, clone the template and exit
-    if not os.path.isfile("config/config.toml"):
-        log.debug("config/config.toml does not exist.")
-
-        with open("config/template_config.toml", encoding="utf8") as template_cfg_file, \
-                open("config/config.toml", "w", encoding="utf8") as user_cfg_file:
-            # Copy the template file to the config file
-            user_cfg_file.write(template_cfg_file.read())
-
-        log.fatal("A config file has been created in config/config.toml."
-                  " Customize it, then restart greed!")
-        exit(1)
-
-    # Compare the template config with the user-made one
-    with open("config/template_config.toml", encoding="utf8") as template_cfg_file, \
-            open("config/config.toml", encoding="utf8") as user_cfg_file:
-        template_cfg = nuconfig.NuConfig(template_cfg_file)
-        user_cfg = nuconfig.NuConfig(user_cfg_file)
-        if not template_cfg.cmplog(user_cfg):
-            log.fatal("There were errors while parsing the config.toml file. Please fix them and restart greed!")
-            exit(2)
-        else:
-            log.debug("Configuration parsed successfully!")
-
     # Finish logging setup
-    logging.root.setLevel(user_cfg["Logging"]["level"])
+    logging.root.setLevel(configloader.user_cfg["Logging"]["level"])
     stream_handler = logging.StreamHandler()
     if coloredlogs is not None:
-        stream_handler.formatter = coloredlogs.ColoredFormatter(user_cfg["Logging"]["format"], style="{")
+        stream_handler.formatter = coloredlogs.ColoredFormatter(configloader.user_cfg["Logging"]["format"], style="{")
     else:
-        stream_handler.formatter = logging.Formatter(user_cfg["Logging"]["format"], style="{")
+        stream_handler.formatter = logging.Formatter(configloader.user_cfg["Logging"]["format"], style="{")
     logging.root.handlers.clear()
     logging.root.addHandler(stream_handler)
     log.debug("Logging setup successfully!")
@@ -73,7 +41,7 @@ def main():
 
     # Create the database engine
     log.debug("Creating the sqlalchemy engine...")
-    engine = sqlalchemy.create_engine(user_cfg["Database"]["engine"])
+    engine = sqlalchemy.create_engine(configloader.user_cfg["Database"]["engine"])
     log.debug("Binding metadata to the engine...")
     database.TableDeclarativeBase.metadata.bind = engine
     log.debug("Creating all missing tables...")
@@ -82,7 +50,7 @@ def main():
     sed.DeferredReflection.prepare(engine)
 
     # Create a bot instance
-    bot = duckbot.factory(user_cfg)(request=telegram.utils.request.Request(user_cfg["Telegram"]["con_pool_size"]))
+    bot = duckbot.factory(configloader.user_cfg)(request=telegram.utils.request.Request(configloader.user_cfg["Telegram"]["con_pool_size"]))
 
     # Test the specified token
     log.debug("Testing bot token...")
@@ -93,7 +61,7 @@ def main():
     log.debug("Bot token is valid!")
 
     # Finding default language
-    default_language = user_cfg["Language"]["default_language"]
+    default_language = configloader.user_cfg["Language"]["default_language"]
     # Creating localization object
     default_loc = localization.Localization(language=default_language, fallback=default_language)
 
@@ -110,7 +78,7 @@ def main():
     # Main loop of the program
     while True:
         # Get a new batch of 100 updates and mark the last 100 parsed as read
-        update_timeout = user_cfg["Telegram"]["long_polling_timeout"]
+        update_timeout = configloader.user_cfg["Telegram"]["long_polling_timeout"]
         log.debug(f"Getting updates from Telegram with a timeout of {update_timeout} seconds")
         updates = bot.get_updates(offset=next_update,
                                   timeout=update_timeout)
@@ -138,7 +106,7 @@ def main():
                     new_worker = worker.Worker(bot=bot,
                                                chat=update.message.chat,
                                                telegram_user=update.message.from_user,
-                                               cfg=user_cfg,
+                                               cfg=configloader.user_cfg,
                                                engine=engine,
                                                daemon=True)
                     # Start the worker

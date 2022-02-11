@@ -49,6 +49,7 @@ class User(TableDeclarativeBase):
             self.language = w.cfg["Language"]["default_language"]
         # The starting wallet value is 0
         self.credit = 0
+        self.worker = w
 
     def __str__(self):
         """Describe the user in the best way possible given the available data."""
@@ -73,7 +74,7 @@ class User(TableDeclarativeBase):
     def recalculate_credit(self):
         """Recalculate the credit for this user by calculating the sum of the values of all their transactions."""
         valid_transactions: typing.List[Transaction] = [t for t in self.transactions if not t.refunded]
-        self.credit = sum(map(lambda t: t.value, valid_transactions)) / (10 ** int(configloader.config["Payments"]["currency_exp"]))
+        self.credit = sum(map(lambda t: t.value, valid_transactions)) / (10 ** int(self.worker.cfg["Payments"]["currency_exp"]))
 
     @property
     def full_name(self):

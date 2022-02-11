@@ -664,7 +664,7 @@ class Worker(threading.Thread):
                                           order=order)
                 self.session.add(order_item)
         # Ensure the user has enough credit to make the purchase
-        credit_required = self.__get_cart_value(cart) - utils.Price(str(self.user.credit), self.loc)
+        credit_required = self.__get_cart_value(cart) - self.Price(str(self.user.credit), self.loc)
         # Notify user in case of insufficient credit
         if credit_required > 0:
             self.bot.send_message(self.chat.id, self.loc.get("error_not_enough_credit"))
@@ -676,7 +676,7 @@ class Worker(threading.Thread):
                     self.Price(self.cfg["Payments"]["CreditCard"]["max_amount"]):
                 self.__make_payment(self.Price(credit_required))
         # If afer requested payment credit is still insufficient (either payment failure or cancel)
-        if utils.Price(str(self.user.credit), self.loc) < self.__get_cart_value(cart):
+        if self.Price(str(self.user.credit), self.loc) < self.__get_cart_value(cart):
             # Rollback all the changes
             self.session.rollback()
         else:
@@ -763,7 +763,7 @@ class Worker(threading.Thread):
         if self.cfg["Payments"]["CreditCard"]["credit_card_token"] != "":
             keyboard.append([telegram.KeyboardButton(self.loc.get("menu_credit_card"))])
         # Bitcoin Payments
-        if configloader.config["Bitcoin"]["api_key"] != "":
+        if self.cfg["Bitcoin"]["api_key"] != "":
             keyboard.append([telegram.KeyboardButton("🛡 Bitcoin")])
         # Keyboard: go back to the previous menu
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cancel"))])
@@ -896,8 +896,8 @@ class Worker(threading.Thread):
         """Add money to the wallet through a bitcoin payment."""
         log.debug("Displaying __add_credit_btc")
         # Create a keyboard to be sent later
-        presets = list(map(lambda s: s.strip(" "), configloader.config["Credit Card"]["payment_presets"].split('|')))
-        keyboard = [[telegram.KeyboardButton(str(utils.Price(preset, self.loc)))] for preset in presets]
+        presets = list(map(lambda s: s.strip(" "), self.config["Credit Card"]["payment_presets"].split('|')))
+        keyboard = [[telegram.KeyboardButton(str(self.Price(preset, self.loc)))] for preset in presets]
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cancel"))])
         # Boolean variable to check if the user has cancelled the action
         cancelled = False
@@ -916,7 +916,7 @@ class Worker(threading.Thread):
                 continue
             raw_value = selection
             # Convert the amount to an integer
-            value = utils.Price(selection, self.loc)
+            value = self.Price(selection, self.loc)
             break
         # If the user cancelled the action...
         else:
@@ -934,7 +934,7 @@ class Worker(threading.Thread):
             btc_address = transaction.address
             # Update btc_price, satoshi, currency, timestamp
             transaction.btc_price = btc_price
-            transaction.currency = configloader.config["Payments"]["currency"]
+            transaction.currency = self.cfg["Payments"]["currency"]
             transaction.timestamp = datetime.datetime.now()
         else:
             btc_address = Blockonomics.new_address().json()["address"]
@@ -942,7 +942,7 @@ class Worker(threading.Thread):
             new_transaction = db.BtcTransaction(user=self.user,
                                          price = btc_price,
                                          value=0,
-                                         currency = configloader.config["Payments"]["currency"],
+                                         currency = self.cfg["Payments"]["currency"],
                                          status = -1,
                                          timestamp = datetime.datetime.now(),
                                          address=btc_address,

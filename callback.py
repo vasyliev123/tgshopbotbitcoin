@@ -1,12 +1,11 @@
 import sys
 import telegram
-import configloader
 import utils
 import flask
 from blockonomics import Blockonomics
 import database as db
 import datetime
-import importlib
+import configloader
 from decimal import Decimal
 
 # Start the bitcoin callback listener
@@ -14,7 +13,7 @@ app = flask.Flask(__name__)
 @app.route('/callback', methods=['GET'])
 def callback():
     # Create a bot instance
-    bot = utils.DuckBot(configloader.config["Telegram"]["token"])
+    bot = utils.DuckBot(configloader.user_cfg["Telegram"]["token"])
 
     # Test the specified token
     try:
@@ -29,7 +28,7 @@ def callback():
     status = int(flask.request.args.get("status"))
     address = flask.request.args.get("addr")
     # Check the secret
-    if secret == configloader.config["Bitcoin"]["secret"]:
+    if secret == configloader.user_cfg["Bitcoin"]["secret"]:
         # Fetch the current transaction by address
         dbsession = db.Session()
         transaction = dbsession.query(db.BtcTransaction).filter(db.BtcTransaction.address == address).one_or_none()
@@ -48,15 +47,15 @@ def callback():
                 # Convert satoshi to fiat
                 satoshi = float(flask.request.args.get("value"))
                 received_btc = satoshi/1.0e8
-                received_dec = round(Decimal(received_btc * transaction.price), int(configloader.config["Payments"]["currency_exp"]))
+                received_dec = round(Decimal(received_btc * transaction.price), int(configloader.user_cfg["Payments"]["currency_exp"]))
                 received_float = float(received_dec)
-                print ("Recieved "+str(received_float)+" "+configloader.config["Payments"]["currency"]+" on address "+address)
+                print ("Recieved "+str(received_float)+" "+configloader.user_cfg["Payments"]["currency"]+" on address "+address)
                 # Add the credit to the user account
                 user = dbsession.query(db.User).filter(db.User.user_id == transaction.user_id).one_or_none()
-                user.credit += int(received_float * (10 ** int(configloader.config["Payments"]["currency_exp"])))
+                user.credit += int(received_float * (10 ** int(configloader.user_cfg["Payments"]["currency_exp"])))
                 # Add a transaction to list
                 new_transaction = db.Transaction(user=user,
-                                             value=int(received_float * (10 ** int(configloader.config["Payments"]["currency_exp"]))),
+                                             value=int(received_float * (10 ** int(configloader.user_cfg["Payments"]["currency_exp"]))),
                                              provider="Bitcoin",
                                              notes = address)
                 # Add and commit the transaction
@@ -66,7 +65,7 @@ def callback():
                 transaction.txid = flask.request.args.get("txid")
                 transaction.status = 2
                 dbsession.commit()
-                bot.send_message(transaction.user_id, "Payment confirmed!\nYour account has been credited with "+str(received_float)+" "+configloader.config["Payments"]["currency"]+".")
+                bot.send_message(transaction.user_id, "Payment confirmed!\nYour account has been credited with "+str(received_float)+" "+configloader.user_cfg["Payments"]["currency"]+".")
                 return "Success"
             else:
                 dbsession.commit()
