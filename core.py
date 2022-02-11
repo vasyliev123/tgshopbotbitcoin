@@ -23,9 +23,8 @@ def main():
     # Rename the main thread for presentation purposes
     threading.current_thread().name = "Core"
 
-    # Start logging setup
+    # Start logging
     log = logging.getLogger("core")
-    # Finish logging setup
     logging.root.setLevel(configloader.user_cfg["Logging"]["level"])
     stream_handler = logging.StreamHandler()
     if coloredlogs is not None:

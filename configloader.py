@@ -2,7 +2,7 @@ import os
 import logging
 import nuconfig
 
-log = logging.getLogger("core")
+log = logging.getLogger(__name__)
 logging.root.setLevel("INFO")
 log.debug("Set logging level to INFO while the config is being loaded")
 
