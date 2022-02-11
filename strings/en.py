@@ -102,14 +102,15 @@ conversation_confirm_cart = "🛒 Your cart contains the following products:\n" 
                             "<i>If you want to proceed, press the Done button below this message.\n" \
                             "To cancel, press the Cancel button.</i>"
 
-# Conversation: the user activated the live orders mode
+# Live orders mode: start
 conversation_live_orders_start = "You are in <b>Live Orders</b> mode\n" \
                                  "All new orders placed by customers will appear in real time in this chat, and you" \
                                  " will be able to mark them as ✅ Completed" \
-                                 " or ✴️ Refund the credit to the customer.\n" \
-                                 "\n" \
-                                 "<i>Press the Stop button below this message to stop the" \
-                                 " feed.</i>"
+                                 " or ✴️ Refund the credit to the customer."
+
+# Live orders mode: stop receiving messages
+conversation_live_orders_stop = "<i>Press the Stop button below this message to stop the" \
+                                " feed.</i>"
 
 # Conversation: help menu has been opened
 conversation_open_help_menu = "What kind of help do you need?"
@@ -131,7 +132,7 @@ conversation_expired = "🕐  I haven't received any messages in a while, so I c
                        "If you want to start a new one, send a new /start command."
 
 # User menu: order
-menu_order = "🛒 Orders"
+menu_order = "🛒 Order products"
 
 # User menu: order status
 menu_order_status = "🛍 My orders"
@@ -332,14 +333,17 @@ payment_invoice_fee_label = "Transaction fee"
 
 # Notification: order has been placed
 notification_order_placed = "A new order was placed:\n" \
+                            "\n" \
                             "{order}"
 
 # Notification: order has been completed
 notification_order_completed = "Your order has been completed!\n" \
+                               "\n" \
                                "{order}"
 
 # Notification: order has been refunded
 notification_order_refunded = "Your order has been refunded!\n" \
+                              "\n" \
                               "{order}"
 
 # Notification: a manual transaction was applied
@@ -358,7 +362,7 @@ bot_info = 'This bot is using <a href="https://github.com/Steffo99/greed">greed<
 
 # Help: guide
 help_msg = "greed's guide is available at this address:\n" \
-           "https://docs.google.com/document/d/1f4MKVr0B7RSQfWTSa_6ZO0LM4nPpky_GX_qdls3EHtQ/"
+           "https://github.com/Steffo99/greed/wiki"
 
 # Help: contact shopkeeper
 contact_shopkeeper = "Currently, the staff available to provide user assistance is composed of:\n" \
@@ -393,6 +397,10 @@ error_nonprivate_chat = "⚠️ This bot only works in private chats."
 # Suggest the creation of a new worker with /start
 error_no_worker_for_chat = "⚠️ The conversation with the bot was interrupted.\n" \
                            "To restart it, send the /start command to the bot."
+
+# Error: a message was sent in a chat, but the worker for that chat is not ready.
+error_worker_not_ready = "🕒 The conversation with the bot is currently starting.\n" \
+                         "Please, wait a few moments before sending more commands!"
 
 # Error: add funds amount over max
 error_payment_amount_over_max = "⚠️ The maximum amount that can be added in a single transaction is {max_amount}."
