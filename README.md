@@ -20,9 +20,8 @@ A customizable Telegram shop bot that accepts bitcoin payments. Demo at https://
 2. Install the project requirements with `pip3 install -r requirements.txt`
 3. _Optional: run `pip3 install coloredlogs` to have colored logging output._
 3. Run `python3 -OO core.py` to generate the configuration file.
-4. Open the config folder and edit the `config.ini` file following the contained instructions.  
-   - Ensure the `is_template` field is set to `no`.
-   - Select your preferred language, example `language = en_US`.
+4. Open the config folder and edit the `config.toml` file following the contained instructions.  
+   - Select your preferred language, example `language = en`.
    - Set your Telegram bot token obtained from the Telegram [Botfather](https://t.me/Botfather).
 5. Run `python3 -OO database.py` to generate the database tables. 
 6. _Optional: customize the `strings.py` file_
@@ -55,7 +54,7 @@ If you downloaded `greed` through the zip archive, you can update it by redownlo
 
 1. You will require a Blockonomics API Key - Complete merchant setup wizard by clicking on Get Started for Free on [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/).
 
-2. Edit the config.ini file to set your Blockonomics api_key 
+2. Edit the config.toml file to set your Blockonomics api_key 
 
 3. Set the HTTP Callback URL on the Blockonomics Merchants Page
 
