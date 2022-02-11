@@ -112,12 +112,6 @@ format = "{asctime} | {threadName} | {name} | {message}"
 # Valid options are FATAL, ERROR, WARNING, INFO, and DEBUG
 level = "INFO"
 
-# Exception reporting settings
-[ErrorReporting]
-# Optional sentry token: get the token at https://sentry.io/ or ask @Steffo for one
-# Needed to automatically report bugs found by the users in the code.
-sentry_token = "https://00000000000000000000000000000000:00000000000000000000000000000000@sentry.io/0000000"
-
 # Bitcoin payment settings
 [Bitcoin]
 # Blockonomics API key

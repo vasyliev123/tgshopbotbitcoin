@@ -12,7 +12,6 @@ A customizable Telegram shop bot that accepts bitcoin payments. Demo at https://
 * A Telegram bot token (obtainable at [@Botfather](https://t.me/Botfather))
 * A payment provider token (obtainable by [connecting a provider with your bot](https://t.me/Botfather))
 * _Optional: a [git client](https://git-scm.com/)_
-* _Optional: a [sentry.io](https://sentry.io) token_
 
 ## Installation
 
