@@ -98,7 +98,7 @@ phone_required = true
 # The full order information includes the order number and the timestamp of the order placement
 full_order_info = false
 # Allow balance refill during the order checkout in case of unsufficient balance
-refill_on_checkout = true
+refill_on_checkout = false
 # Display welcome message (conversation_after_start) when the user sends /start
 display_welcome_message = true
 
