@@ -1,19 +1,21 @@
 import sys
 import telegram
-import utils
+import configloader
 import flask
+import duckbot
 from blockonomics import Blockonomics
 import database as db
 import datetime
 import configloader
 from decimal import Decimal
+import sqlalchemy
 
 # Start the bitcoin callback listener
 app = flask.Flask(__name__)
 @app.route('/callback', methods=['GET'])
 def callback():
     # Create a bot instance
-    bot = utils.DuckBot(configloader.user_cfg["Telegram"]["token"])
+    bot = duckbot.factory(configloader.user_cfg)(request=telegram.utils.request.Request(configloader.user_cfg["Telegram"]["con_pool_size"]))
 
     # Test the specified token
     try:
@@ -30,7 +32,8 @@ def callback():
     # Check the secret
     if secret == configloader.user_cfg["Bitcoin"]["secret"]:
         # Fetch the current transaction by address
-        dbsession = db.Session()
+        engine = sqlalchemy.create_engine(configloader.user_cfg["Database"]["engine"])
+        dbsession = sqlalchemy.orm.sessionmaker(bind=engine)()
         transaction = dbsession.query(db.BtcTransaction).filter(db.BtcTransaction.address == address).one_or_none()
         if transaction and transaction.txid == "":
             # Check the status
