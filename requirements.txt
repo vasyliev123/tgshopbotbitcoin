@@ -19,6 +19,5 @@ tzlocal==2.1
 urllib3==1.26.5
 
 # Other dependecies
-raven
 flask
 gunicorn

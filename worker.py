@@ -12,7 +12,6 @@ from typing import *
 
 import requests
 from blockonomics import Blockonomics
-import logging
 import sqlalchemy
 import telegram
 
