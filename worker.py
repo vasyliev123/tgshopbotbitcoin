@@ -1,29 +1,30 @@
-import threading
-from typing import *
-import uuid
-import datetime
-import telegram
-import configloader
-import sys
-import queue as queuem
-import database as db
-import re
-import utils
 import os
+import sys
+import datetime
+import logging
+import queue as queuem
+import re
+import threading
 import traceback
+import uuid
 from html import escape
+from typing import *
+
 import requests
 from blockonomics import Blockonomics
-import time
-import json
-import logging
+import sqlalchemy
+import telegram
+
+import database as db
 import localization
+import nuconfig
 
 log = logging.getLogger(__name__)
 
 
 class StopSignal:
     """A data class that should be sent to the worker when the conversation has to be stopped abnormally."""
+
     def __init__(self, reason: str = ""):
         self.reason = reason
 
@@ -36,16 +37,25 @@ class CancelSignal:
 class Worker(threading.Thread):
     """A worker for a single conversation. A new one is created every time the /start command is sent."""
 
-    def __init__(self, bot: utils.DuckBot, chat: telegram.Chat, telegram_user: telegram.User, *args, **kwargs):
+    def __init__(self,
+                 bot,
+                 chat: telegram.Chat,
+                 telegram_user: telegram.User,
+                 cfg: nuconfig.NuConfig,
+                 engine,
+                 *args,
+                 **kwargs):
         # Initialize the thread
         super().__init__(name=f"Worker {chat.id}", *args, **kwargs)
-        # Store the bot and chat info inside the class
-        self.bot: utils.DuckBot = bot
+        # Store the bot, chat info and config inside the class
+        self.bot = bot
         self.chat: telegram.Chat = chat
         self.telegram_user: telegram.User = telegram_user
+        self.cfg = cfg
+        self.loc = None
         # Open a new database session
         log.debug(f"Opening new database session for {self.name}")
-        self.session = db.Session()
+        self.session = sqlalchemy.orm.sessionmaker(bind=engine)()
         # Get the user db data from the users and admin tables
         self.user: Optional[db.User] = None
         self.admin: Optional[db.Admin] = None
@@ -53,22 +63,102 @@ class Worker(threading.Thread):
         self.queue = queuem.Queue()
         # The current active invoice payload; reject all invoices with a different payload
         self.invoice_payload = None
-        # The localization strings for this user
-        self.loc = None
-        # The Sentry client for reporting errors encountered by the user
-        if configloader.config["Error Reporting"]["sentry_token"] != \
-                "https://00000000000000000000000000000000:00000000000000000000000000000000@sentry.io/0000000":
-            import raven
-            self.sentry_client = raven.Client(configloader.config["Error Reporting"]["sentry_token"],
-                                              release=raven.fetch_git_sha(os.path.dirname(__file__)),
-                                              environment="Dev" if __debug__ else "Prod")
-            log.debug("Sentry: enabled")
-        else:
-            self.sentry_client = None
-            log.debug("Sentry: disabled")
+        # The price class of this worker.
+        self.Price = self.price_factory()
 
     def __repr__(self):
         return f"<{self.__class__.__qualname__} {self.chat.id}>"
+
+    # noinspection PyMethodParameters
+    def price_factory(worker):
+        class Price:
+            """The base class for the prices in greed.
+            Its int value is in minimum units, while its float and str values are in decimal format."""
+
+            def __init__(self, value: Union[int, float, str, "Price"]):
+                if isinstance(value, int):
+                    # Keep the value as it is
+                    self.value = int(value)
+                elif isinstance(value, float):
+                    # Convert the value to minimum units
+                    self.value = int(value * (10 ** worker.cfg["Payments"]["currency_exp"]))
+                elif isinstance(value, str):
+                    # Remove decimal points, then cast to int
+                    self.value = int(float(value.replace(",", ".")) * (10 ** worker.cfg["Payments"]["currency_exp"]))
+                elif isinstance(value, Price):
+                    # Copy self
+                    self.value = value.value
+
+            def __repr__(self):
+                return f"<{self.__class__.__qualname__} of value {self.value}>"
+
+            def __str__(self):
+                return worker.loc.get(
+                    "currency_format_string",
+                    symbol=worker.cfg["Payments"]["currency_symbol"],
+                    value="{0:.2f}".format(self.value / (10 ** worker.cfg["Payments"]["currency_exp"]))
+                )
+
+            def __int__(self):
+                return self.value
+
+            def __float__(self):
+                return self.value / (10 ** worker.cfg["Payments"]["currency_exp"])
+
+            def __ge__(self, other):
+                return self.value >= Price(other).value
+
+            def __le__(self, other):
+                return self.value <= Price(other).value
+
+            def __eq__(self, other):
+                return self.value == Price(other).value
+
+            def __gt__(self, other):
+                return self.value > Price(other).value
+
+            def __lt__(self, other):
+                return self.value < Price(other).value
+
+            def __add__(self, other):
+                return Price(self.value + Price(other).value)
+
+            def __sub__(self, other):
+                return Price(self.value - Price(other).value)
+
+            def __mul__(self, other):
+                return Price(int(self.value * other))
+
+            def __floordiv__(self, other):
+                return Price(int(self.value // other))
+
+            def __radd__(self, other):
+                return self.__add__(other)
+
+            def __rsub__(self, other):
+                return Price(Price(other).value - self.value)
+
+            def __rmul__(self, other):
+                return self.__mul__(other)
+
+            def __iadd__(self, other):
+                self.value += Price(other).value
+                return self
+
+            def __isub__(self, other):
+                self.value -= Price(other).value
+                return self
+
+            def __imul__(self, other):
+                self.value *= other
+                self.value = int(self.value)
+                return self
+
+            def __ifloordiv__(self, other):
+                self.value //= other
+                return self
+
+        return Price
 
     def run(self):
         """The conversation code."""
@@ -81,15 +171,13 @@ class Worker(threading.Thread):
             # Check if there are other registered users: if there aren't any, the first user will be owner of the bot
             will_be_owner = (self.session.query(db.Admin).first() is None)
             # Create the new record
-            self.user = db.User(self.telegram_user)
+            self.user = db.User(w=self)
             # Add the new record to the db
             self.session.add(self.user)
-            # Flush the session to get an userid
-            self.session.flush()
             # If the will be owner flag is set
             if will_be_owner:
                 # Become owner
-                self.admin = db.Admin(user_id=self.user.user_id,
+                self.admin = db.Admin(user=self.user,
                                       edit_products=True,
                                       receive_orders=True,
                                       create_transactions=True,
@@ -109,7 +197,8 @@ class Worker(threading.Thread):
         # noinspection PyBroadException
         try:
             # Welcome the user to the bot
-            self.bot.send_message(self.chat.id, self.loc.get("conversation_after_start"))
+            if self.cfg["Appearance"]["display_welcome_message"] == "yes":
+                self.bot.send_message(self.chat.id, self.loc.get("conversation_after_start"))
             # If the user is not an admin, send him to the user menu
             if self.admin is None:
                 self.__user_menu()
@@ -121,17 +210,19 @@ class Worker(threading.Thread):
                 self.session.commit()
                 # Open the admin menu
                 self.__admin_menu()
-        except Exception:
+        except Exception as e:
             # Try to notify the user of the exception
             # noinspection PyBroadException
             try:
                 self.bot.send_message(self.chat.id, self.loc.get("fatal_conversation_exception"))
-            except Exception:
-                pass
-            # If the Sentry integration is enabled, log the exception
-            if self.sentry_client is not None:
-                self.sentry_client.captureException()
+            except Exception as ne:
+                log.error(f"Failed to notify the user of a conversation exception: {ne}")
+            log.error(f"Exception in {self}: {e}")
             traceback.print_exception(*sys.exc_info())
+
+    def is_ready(self):
+        # Change this if more parameters are added!
+        return self.loc is not None
 
     def stop(self, reason: str = ""):
         """Gracefully stop the worker process"""
@@ -153,7 +244,7 @@ class Worker(threading.Thread):
         If a stop signal is sent, try to gracefully stop the thread."""
         # Pop data from the queue
         try:
-            data = self.queue.get(timeout=int(configloader.config["Telegram"]["conversation_timeout"]))
+            data = self.queue.get(timeout=self.cfg["Telegram"]["conversation_timeout"])
         except queuem.Empty:
             # If the conversation times out, gracefully stop the thread
             self.__graceful_stop(StopSignal("timeout"))
@@ -215,7 +306,7 @@ class Worker(threading.Thread):
             if update.message.text is None:
                 continue
             # Try to match the regex with the received message
-            match = re.search(regex, update.message.text)
+            match = re.search(regex, update.message.text, re.DOTALL)
             # Ensure there is a match
             if match is None:
                 continue
@@ -245,12 +336,22 @@ class Worker(threading.Thread):
             # Return the precheckoutquery
             return update.pre_checkout_query
 
-    def __wait_for_successfulpayment(self) -> telegram.SuccessfulPayment:
+    def __wait_for_successfulpayment(self,
+                                     cancellable: bool = False) -> Union[telegram.SuccessfulPayment, CancelSignal]:
         """Continue getting updates until a successfulpayment is received."""
         log.debug("Waiting for a SuccessfulPayment...")
         while True:
             # Get the next update
             update = self.__receive_next_update()
+            # If a CancelSignal is received...
+            if isinstance(update, CancelSignal):
+                # And the wait is cancellable...
+                if cancellable:
+                    # Return the CancelSignal
+                    return update
+                else:
+                    # Ignore the signal
+                    continue
             # Ensure the update contains a message
             if update.message is None:
                 continue
@@ -360,7 +461,7 @@ class Worker(threading.Thread):
             # Send the previously created keyboard to the user (ensuring it can be clicked only 1 time)
             self.bot.send_message(self.chat.id,
                                   self.loc.get("conversation_open_user_menu",
-                                               credit=utils.Price(self.user.credit, self.loc)),
+                                               credit=self.Price(self.user.credit)),
                                   reply_markup=telegram.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
             # Wait for a reply from the user
             selection = self.__wait_for_specific_message([
@@ -412,7 +513,7 @@ class Worker(threading.Thread):
             if product.price is None:
                 continue
             # Send the message without the keyboard to get the message id
-            message = product.send_as_message(loc=self.loc, chat_id=self.chat.id)
+            message = product.send_as_message(w=self, chat_id=self.chat.id)
             # Add the product to the cart
             cart[message['result']['message_id']] = [product, 0]
             # Create the inline keyboard to add the product to the cart
@@ -423,12 +524,12 @@ class Worker(threading.Thread):
             if product.image is None:
                 self.bot.edit_message_text(chat_id=self.chat.id,
                                            message_id=message['result']['message_id'],
-                                           text=product.text(loc=self.loc),
+                                           text=product.text(w=self),
                                            reply_markup=inline_keyboard)
             else:
                 self.bot.edit_message_caption(chat_id=self.chat.id,
                                               message_id=message['result']['message_id'],
-                                              caption=product.text(loc=self.loc),
+                                              caption=product.text(w=self),
                                               reply_markup=inline_keyboard)
         # Create the keyboard with the cancel button
         inline_keyboard = telegram.InlineKeyboardMarkup([[telegram.InlineKeyboardButton(self.loc.get("menu_cancel"),
@@ -472,13 +573,13 @@ class Worker(threading.Thread):
                 if product.image is None:
                     self.bot.edit_message_text(chat_id=self.chat.id,
                                                message_id=callback.message.message_id,
-                                               text=product.text(loc=self.loc,
+                                               text=product.text(w=self,
                                                                  cart_qty=cart[callback.message.message_id][1]),
                                                reply_markup=product_inline_keyboard)
                 else:
                     self.bot.edit_message_caption(chat_id=self.chat.id,
                                                   message_id=callback.message.message_id,
-                                                  caption=product.text(loc=self.loc,
+                                                  caption=product.text(w=self,
                                                                        cart_qty=cart[callback.message.message_id][1]),
                                                   reply_markup=product_inline_keyboard)
 
@@ -520,13 +621,13 @@ class Worker(threading.Thread):
                 # Edit the product message
                 if product.image is None:
                     self.bot.edit_message_text(chat_id=self.chat.id, message_id=callback.message.message_id,
-                                               text=product.text(loc=self.loc,
+                                               text=product.text(w=self,
                                                                  cart_qty=cart[callback.message.message_id][1]),
                                                reply_markup=product_inline_keyboard)
                 else:
                     self.bot.edit_message_caption(chat_id=self.chat.id,
                                                   message_id=callback.message.message_id,
-                                                  caption=product.text(loc=self.loc,
+                                                  caption=product.text(w=self,
                                                                        cart_qty=cart[callback.message.message_id][1]),
                                                   reply_markup=product_inline_keyboard)
 
@@ -554,28 +655,27 @@ class Worker(threading.Thread):
                          notes=notes if not isinstance(notes, CancelSignal) else "")
         # Add the record to the session and get an ID
         self.session.add(order)
-        self.session.flush()
         # For each product added to the cart, create a new OrderItem
         for product in cart:
             # Create {quantity} new OrderItems
             for i in range(0, cart[product][1]):
                 order_item = db.OrderItem(product=cart[product][0],
-                                          order_id=order.order_id)
+                                          order=order)
                 self.session.add(order_item)
         # Ensure the user has enough credit to make the purchase
-        credit_required = self.__get_cart_value(cart) - utils.Price(str(self.user.credit), self.loc)
+        credit_required = self.__get_cart_value(cart) - self.user.credit
         # Notify user in case of insufficient credit
         if credit_required > 0:
             self.bot.send_message(self.chat.id, self.loc.get("error_not_enough_credit"))
             # Suggest payment for missing credit value if configuration allows refill
-            if configloader.config["Credit Card"]["credit_card_token"] != "" \
-                    and configloader.config["Appearance"]["refill_on_checkout"] == 'yes' \
-                    and utils.Price(int(configloader.config["Credit Card"]["min_amount"]), self.loc) <= \
-                        credit_required <= \
-                        utils.Price(int(configloader.config["Credit Card"]["max_amount"]), self.loc):
-                self.__make_payment(utils.Price(credit_required, self.loc))
+            if self.cfg["Payments"]["CreditCard"]["credit_card_token"] != "" \
+                    and self.cfg["Appearance"]["refill_on_checkout"] \
+                    and self.Price(self.cfg["Payments"]["CreditCard"]["min_amount"]) <= \
+                    credit_required <= \
+                    self.Price(self.cfg["Payments"]["CreditCard"]["max_amount"]):
+                self.__make_payment(self.Price(credit_required))
         # If afer requested payment credit is still insufficient (either payment failure or cancel)
-        if utils.Price(str(self.user.credit), self.loc) < self.__get_cart_value(cart):
+        if self.user.credit < self.__get_cart_value(cart):
             # Rollback all the changes
             self.session.rollback()
         else:
@@ -584,7 +684,7 @@ class Worker(threading.Thread):
 
     def __get_cart_value(self, cart):
         # Calculate total items value in cart
-        value = utils.Price(0, self.loc)
+        value = self.Price(0)
         for product in cart:
             value += cart[product][0].price * cart[product][1]
         return value
@@ -594,7 +694,7 @@ class Worker(threading.Thread):
         product_list = ""
         for product_id in cart:
             if cart[product_id][1] > 0:
-                product_list += cart[product_id][0].text(loc=self.loc,
+                product_list += cart[product_id][0].text(w=self,
                                                          style="short",
                                                          cart_qty=cart[product_id][1]) + "\n"
         return product_list
@@ -603,7 +703,7 @@ class Worker(threading.Thread):
         # Create a new transaction and add it to the session
         transaction = db.Transaction(user=self.user,
                                      value=value,
-                                     order_id=order.order_id)
+                                     order=order)
         self.session.add(transaction)
         # Commit all the changes
         self.session.commit()
@@ -616,8 +716,7 @@ class Worker(threading.Thread):
 
     def __order_notify_admins(self, order):
         # Notify the user of the order result
-        self.bot.send_message(self.chat.id, self.loc.get("success_order_created", order=order.text(loc=self.loc,
-                                                                                                   session=self.session,
+        self.bot.send_message(self.chat.id, self.loc.get("success_order_created", order=order.text(w=self,
                                                                                                    user=True)))
         # Notify the admins (in Live Orders mode) of the new order
         admins = self.session.query(db.Admin).filter_by(live_mode=True).all()
@@ -631,7 +730,7 @@ class Worker(threading.Thread):
         for admin in admins:
             self.bot.send_message(admin.user_id,
                                   self.loc.get('notification_order_placed',
-                                               order=order.text(loc=self.loc, session=self.session)),
+                                               order=order.text(w=self)),
                                   reply_markup=order_keyboard)
 
     def __order_status(self):
@@ -648,7 +747,7 @@ class Worker(threading.Thread):
             self.bot.send_message(self.chat.id, self.loc.get("error_no_orders"))
         # Display the order status to the user
         for order in orders:
-            self.bot.send_message(self.chat.id, order.text(loc=self.loc, session=self.session, user=True))
+            self.bot.send_message(self.chat.id, order.text(w=self, user=True))
         # TODO: maybe add a page displayer instead of showing the latest 5 orders
 
     def __add_credit_menu(self):
@@ -660,10 +759,10 @@ class Worker(threading.Thread):
         # Cash
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cash"))])
         # Telegram Payments
-        if configloader.config["Credit Card"]["credit_card_token"] != "":
+        if self.cfg["Payments"]["CreditCard"]["credit_card_token"] != "":
             keyboard.append([telegram.KeyboardButton(self.loc.get("menu_credit_card"))])
         # Bitcoin Payments
-        if configloader.config["Bitcoin"]["api_key"] != "":
+        if self.cfg["Bitcoin"]["api_key"] != "":
             keyboard.append([telegram.KeyboardButton("🛡 Bitcoin")])
         # Keyboard: go back to the previous menu
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cancel"))])
@@ -671,8 +770,9 @@ class Worker(threading.Thread):
         self.bot.send_message(self.chat.id, self.loc.get("conversation_payment_method"),
                               reply_markup=telegram.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
         # Wait for a reply from the user
-        selection = self.__wait_for_specific_message([self.loc.get("menu_cash"), self.loc.get("menu_credit_card"), "🛡 Bitcoin", self.loc.get("menu_cancel")],
-                                                     cancellable=True)
+        selection = self.__wait_for_specific_message(
+            [self.loc.get("menu_cash"), self.loc.get("menu_credit_card"), "🛡 Bitcoin", self.loc.get("menu_cancel")],
+            cancellable=True)
         # If the user has selected the Cash option...
         if selection == self.loc.get("menu_cash"):
             # Go to the pay with cash function
@@ -695,8 +795,8 @@ class Worker(threading.Thread):
         """Add money to the wallet through a credit card payment."""
         log.debug("Displaying __add_credit_cc")
         # Create a keyboard to be sent later
-        presets = list(map(lambda s: s.strip(" "), configloader.config["Credit Card"]["payment_presets"].split('|')))
-        keyboard = [[telegram.KeyboardButton(str(utils.Price(preset, self.loc)))] for preset in presets]
+        presets = self.cfg["Payments"]["CreditCard"]["payment_presets"]
+        keyboard = [[telegram.KeyboardButton(str(self.Price(preset)))] for preset in presets]
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cancel"))])
         # Boolean variable to check if the user has cancelled the action
         cancelled = False
@@ -706,22 +806,25 @@ class Worker(threading.Thread):
             self.bot.send_message(self.chat.id, self.loc.get("payment_cc_amount"),
                                   reply_markup=telegram.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
             # Wait until a valid amount is sent
-            selection = self.__wait_for_regex(r"([0-9]+(?:[.,][0-9]+)?|" + self.loc.get("menu_cancel") + r")", cancellable=True)
+            selection = self.__wait_for_regex(r"([0-9]+(?:[.,][0-9]+)?|" + self.loc.get("menu_cancel") + r")",
+                                              cancellable=True)
             # If the user cancelled the action
             if isinstance(selection, CancelSignal):
                 # Exit the loop
                 cancelled = True
                 continue
             # Convert the amount to an integer
-            value = utils.Price(selection, self.loc)
+            value = self.Price(selection)
             # Ensure the amount is within the range
-            if value > utils.Price(int(configloader.config["Credit Card"]["max_amount"]), self.loc):
+            if value > self.Price(self.cfg["Payments"]["CreditCard"]["max_amount"]):
                 self.bot.send_message(self.chat.id,
-                                      self.loc.get("error_payment_amount_over_max", max_amount=utils.Price(configloader.config["Credit Card"]["max_amount"], self.loc)))
+                                      self.loc.get("error_payment_amount_over_max",
+                                                   max_amount=self.Price(self.cfg["CreditCard"]["max_amount"])))
                 continue
-            elif value < utils.Price(int(configloader.config["Credit Card"]["min_amount"]), self.loc):
+            elif value < self.Price(self.cfg["Payments"]["CreditCard"]["min_amount"]):
                 self.bot.send_message(self.chat.id,
-                                      self.loc.get("error_payment_amount_under_min", min_amount=utils.Price(configloader.config["Credit Card"]["min_amount"], self.loc)))
+                                      self.loc.get("error_payment_amount_under_min",
+                                                   min_amount=self.Price(self.cfg["CreditCard"]["min_amount"])))
                 continue
             break
         # If the user cancelled the action...
@@ -742,7 +845,8 @@ class Worker(threading.Thread):
             prices.append(telegram.LabeledPrice(label=self.loc.get("payment_invoice_fee_label"),
                                                 amount=fee))
         # Create the invoice keyboard
-        inline_keyboard = telegram.InlineKeyboardMarkup([[telegram.InlineKeyboardButton(self.loc.get("menu_pay"), pay=True)],
+        inline_keyboard = telegram.InlineKeyboardMarkup([[telegram.InlineKeyboardButton(self.loc.get("menu_pay"),
+                                                                                        pay=True)],
                                                          [telegram.InlineKeyboardButton(self.loc.get("menu_cancel"),
                                                                                         callback_data="cmd_cancel")]])
         # The amount is valid, send the invoice
@@ -750,14 +854,17 @@ class Worker(threading.Thread):
                               title=self.loc.get("payment_invoice_title"),
                               description=self.loc.get("payment_invoice_description", amount=str(amount)),
                               payload=self.invoice_payload,
-                              provider_token=configloader.config["Credit Card"]["credit_card_token"],
+                              provider_token=self.cfg["Payments"]["CreditCard"]["credit_card_token"],
                               start_parameter="tempdeeplink",
-                              currency=configloader.config["Payments"]["currency"],
+                              currency=self.cfg["Payments"]["currency"],
                               prices=prices,
-                              need_name=configloader.config["Credit Card"]["name_required"] == "yes",
-                              need_email=configloader.config["Credit Card"]["email_required"] == "yes",
-                              need_phone_number=configloader.config["Credit Card"]["phone_required"] == "yes",
-                              reply_markup=inline_keyboard)
+                              need_name=self.cfg["Payments"]["CreditCard"]["name_required"],
+                              need_email=self.cfg["Payments"]["CreditCard"]["email_required"],
+                              need_phone_number=self.cfg["Payments"]["CreditCard"]["phone_required"],
+                              reply_markup=inline_keyboard,
+                              max_tip_amount=self.cfg["Payments"]["CreditCard"]["max_tip_amount"],
+                              suggested_tip_amounts=self.cfg["Payments"]["CreditCard"]["tip_presets"],
+                              )
         # Wait for the precheckout query
         precheckoutquery = self.__wait_for_precheckoutquery(cancellable=True)
         # Check if the user has cancelled the invoice
@@ -767,10 +874,10 @@ class Worker(threading.Thread):
         # Accept the checkout
         self.bot.answer_pre_checkout_query(precheckoutquery.id, ok=True)
         # Wait for the payment
-        successfulpayment = self.__wait_for_successfulpayment()
+        successfulpayment = self.__wait_for_successfulpayment(cancellable=False)
         # Create a new database transaction
         transaction = db.Transaction(user=self.user,
-                                     value=int(successfulpayment.total_amount) - fee,
+                                     value=int(amount),
                                      provider="Credit Card",
                                      telegram_charge_id=successfulpayment.telegram_payment_charge_id,
                                      provider_charge_id=successfulpayment.provider_payment_charge_id)
@@ -788,8 +895,8 @@ class Worker(threading.Thread):
         """Add money to the wallet through a bitcoin payment."""
         log.debug("Displaying __add_credit_btc")
         # Create a keyboard to be sent later
-        presets = list(map(lambda s: s.strip(" "), configloader.config["Credit Card"]["payment_presets"].split('|')))
-        keyboard = [[telegram.KeyboardButton(str(utils.Price(preset, self.loc)))] for preset in presets]
+        presets = self.cfg["Payments"]["CreditCard"]["payment_presets"]
+        keyboard = [[telegram.KeyboardButton(str(self.Price(preset)))] for preset in presets]
         keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cancel"))])
         # Boolean variable to check if the user has cancelled the action
         cancelled = False
@@ -808,7 +915,7 @@ class Worker(threading.Thread):
                 continue
             raw_value = selection
             # Convert the amount to an integer
-            value = utils.Price(selection, self.loc)
+            value = self.Price(selection)
             break
         # If the user cancelled the action...
         else:
@@ -826,7 +933,7 @@ class Worker(threading.Thread):
             btc_address = transaction.address
             # Update btc_price, satoshi, currency, timestamp
             transaction.btc_price = btc_price
-            transaction.currency = configloader.config["Payments"]["currency"]
+            transaction.currency = self.cfg["Payments"]["currency"]
             transaction.timestamp = datetime.datetime.now()
         else:
             btc_address = Blockonomics.new_address().json()["address"]
@@ -834,7 +941,7 @@ class Worker(threading.Thread):
             new_transaction = db.BtcTransaction(user=self.user,
                                          price = btc_price,
                                          value=0,
-                                         currency = configloader.config["Payments"]["currency"],
+                                         currency = self.cfg["Payments"]["currency"],
                                          status = -1,
                                          timestamp = datetime.datetime.now(),
                                          address=btc_address,
@@ -845,11 +952,10 @@ class Worker(threading.Thread):
         # Send a message containing the btc pay info
         self.__send_btc_payment_info(btc_address, btc_amount)
 
-    @staticmethod
-    def __get_total_fee(amount):
+    def __get_total_fee(self, amount):
         # Calculate a fee for the required amount
-        fee_percentage = float(configloader.config["Credit Card"]["fee_percentage"]) / 100
-        fee_fixed = int(configloader.config["Credit Card"]["fee_fixed"])
+        fee_percentage = self.cfg["Payments"]["CreditCard"]["fee_percentage"] / 100
+        fee_fixed = self.cfg["Payments"]["CreditCard"]["fee_fixed"]
         total_fee = amount * fee_percentage + fee_fixed
         if total_fee > 0:
             return total_fee
@@ -881,8 +987,7 @@ class Worker(threading.Thread):
             keyboard.append([self.loc.get("menu_user_mode")])
             # Send the previously created keyboard to the user (ensuring it can be clicked only 1 time)
             self.bot.send_message(self.chat.id, self.loc.get("conversation_open_admin_menu"),
-                                  reply_markup=telegram.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True),
-                                  )
+                                  reply_markup=telegram.ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
             # Wait for a reply from the user
             selection = self.__wait_for_specific_message([self.loc.get("menu_products"),
                                                           self.loc.get("menu_orders"),
@@ -997,8 +1102,8 @@ class Worker(threading.Thread):
         if product:
             self.bot.send_message(self.chat.id,
                                   self.loc.get("edit_current_value",
-                                      value=(str(utils.Price(product.price, self.loc))
-                                             if product.price is not None else 'Non in vendita')),
+                                               value=(str(self.Price(product.price))
+                                                      if product.price is not None else 'Non in vendita')),
                                   reply_markup=cancel)
         # Wait for an answer
         price = self.__wait_for_regex(r"([0-9]+(?:[.,][0-9]{1,2})?|[Xx])",
@@ -1009,7 +1114,9 @@ class Worker(threading.Thread):
         elif price.lower() == "x":
             price = None
         else:
-            price = utils.Price(price, self.loc)
+            price = self.Price(price)
+        if not isinstance(price, CancelSignal) and price is not None:
+            price = int(price)
         # Ask for the product image
         self.bot.send_message(self.chat.id, self.loc.get("ask_product_image"), reply_markup=cancel)
         # Wait for an answer
@@ -1020,7 +1127,7 @@ class Worker(threading.Thread):
             # noinspection PyTypeChecker
             product = db.Product(name=name,
                                  description=description,
-                                 price=int(price) if price is not None else None,
+                                 price=price,
                                  deleted=False)
             # Add the record to the database
             self.session.add(product)
@@ -1029,7 +1136,7 @@ class Worker(threading.Thread):
             # Edit the record with the new values
             product.name = name if not isinstance(name, CancelSignal) else product.name
             product.description = description if not isinstance(description, CancelSignal) else product.description
-            product.price = int(price) if not isinstance(price, CancelSignal) else product.price
+            product.price = price if not isinstance(price, CancelSignal) else product.price
         # If a photo has been sent...
         if isinstance(photo_list, list):
             # Find the largest photo id
@@ -1085,7 +1192,14 @@ class Worker(threading.Thread):
         cancel_keyboard = telegram.InlineKeyboardMarkup([[telegram.InlineKeyboardButton(self.loc.get("menu_cancel"),
                                                                                         callback_data="cmd_cancel")]])
         # Send a small intro message on the Live Orders mode
-        self.bot.send_message(self.chat.id, self.loc.get("conversation_live_orders_start"), reply_markup=stop_keyboard)
+        # Remove the keyboard with the first message... (#39)
+        self.bot.send_message(self.chat.id,
+                              self.loc.get("conversation_live_orders_start"),
+                              reply_markup=telegram.ReplyKeyboardRemove())
+        # ...and display a small inline keyboard with the following one
+        self.bot.send_message(self.chat.id,
+                              self.loc.get("conversation_live_orders_stop"),
+                              reply_markup=stop_keyboard)
         # Create the order keyboard
         order_keyboard = telegram.InlineKeyboardMarkup([[telegram.InlineKeyboardButton(self.loc.get("menu_complete"),
                                                                                        callback_data="order_complete")],
@@ -1100,7 +1214,7 @@ class Worker(threading.Thread):
         # Create a message for every one of them
         for order in orders:
             # Send the created message
-            self.bot.send_message(self.chat.id, order.text(loc=self.loc, session=self.session),
+            self.bot.send_message(self.chat.id, order.text(w=self),
                                   reply_markup=order_keyboard)
         # Set the Live mode flag to True
         self.admin.live_mode = True
@@ -1116,7 +1230,7 @@ class Worker(threading.Thread):
                 break
             # Find the order
             order_id = re.search(self.loc.get("order_number").replace("{id}", "([0-9]+)"), update.message.text).group(1)
-            order = self.session.query(db.Order).filter(db.Order.order_id == order_id).one()
+            order = self.session.query(db.Order).get(order_id)
             # Check if the order hasn't been already cleared
             if order.delivery_date is not None or order.refund_date is not None:
                 # Notify the admin and skip that order
@@ -1129,11 +1243,12 @@ class Worker(threading.Thread):
                 # Commit the transaction
                 self.session.commit()
                 # Update order message
-                self.bot.edit_message_text(order.text(loc=self.loc, session=self.session), chat_id=self.chat.id,
+                self.bot.edit_message_text(order.text(w=self), chat_id=self.chat.id,
                                            message_id=update.message.message_id)
                 # Notify the user of the completition
                 self.bot.send_message(order.user_id,
-                                      self.loc.get("notification_order_completed", order=order.text(loc=self.loc, session=self.session, user=True)))
+                                      self.loc.get("notification_order_completed",
+                                                   order=order.text(w=self, user=True)))
             # If the user pressed the refund order button, refund the order...
             elif update.data == "order_refund":
                 # Ask for a refund reason
@@ -1157,13 +1272,12 @@ class Worker(threading.Thread):
                 # Commit the changes
                 self.session.commit()
                 # Update the order message
-                self.bot.edit_message_text(order.text(loc=self.loc, session=self.session),
+                self.bot.edit_message_text(order.text(w=self),
                                            chat_id=self.chat.id,
                                            message_id=update.message.message_id)
                 # Notify the user of the refund
                 self.bot.send_message(order.user_id,
-                                      self.loc.get("notification_order_refunded", order=order.text(loc=self.loc,
-                                                                                                   session=self.session,
+                                      self.loc.get("notification_order_refunded", order=order.text(w=self,
                                                                                                    user=True)))
                 # Notify the admin of the refund
                 self.bot.send_message(self.chat.id, self.loc.get("success_order_refunded", order_id=order.order_id))
@@ -1182,12 +1296,12 @@ class Worker(threading.Thread):
         # Request from the user the amount of money to be credited manually
         self.bot.send_message(self.chat.id, self.loc.get("ask_credit"), reply_markup=cancel)
         # Wait for an answer
-        reply = self.__wait_for_regex(r"(-? ?[0-9]{1,3}(?:[.,][0-9]{1,2})?)", cancellable=True)
+        reply = self.__wait_for_regex(r"(-? ?[0-9]+(?:[.,][0-9]{1,2})?)", cancellable=True)
         # Allow the cancellation of the operation
         if isinstance(reply, CancelSignal):
             return
         # Convert the reply to a price object
-        price = utils.Price(reply, self.loc)
+        price = self.Price(reply)
         # Ask the user for notes
         self.bot.send_message(self.chat.id, self.loc.get("ask_transaction_notes"), reply_markup=cancel)
         # Wait for an answer
@@ -1208,10 +1322,10 @@ class Worker(threading.Thread):
         # Notify the user of the credit/debit
         self.bot.send_message(user.user_id,
                               self.loc.get("notification_transaction_created",
-                                           transaction=transaction.text(loc=self.loc)))
+                                           transaction=transaction.text(w=self)))
         # Notify the admin of the success
         self.bot.send_message(self.chat.id, self.loc.get("success_transaction_created",
-                                                         transaction=transaction.text(loc=self.loc)))
+                                                         transaction=transaction.text(w=self)))
 
     def __help_menu(self):
         """Help menu. Allows the user to ask for assistance, get a guide or see some info about the bot."""
@@ -1273,11 +1387,12 @@ class Worker(threading.Thread):
                     telegram.InlineKeyboardButton(self.loc.get("menu_next"), callback_data="cmd_next")
                 )
             # Add a Done button
-            inline_keyboard_list.append([telegram.InlineKeyboardButton(self.loc.get("menu_done"), callback_data="cmd_done")])
+            inline_keyboard_list.append(
+                [telegram.InlineKeyboardButton(self.loc.get("menu_done"), callback_data="cmd_done")])
             # Create the inline keyboard markup
             inline_keyboard = telegram.InlineKeyboardMarkup(inline_keyboard_list)
             # Create the message text
-            transactions_string = "\n".join([transaction.text(loc=self.loc) for transaction in transactions])
+            transactions_string = "\n".join([transaction.text(w=self) for transaction in transactions])
             text = self.loc.get("transactions_page", page=page + 1, transactions=transactions_string)
             # Update the previously sent message
             self.bot.edit_message_text(chat_id=self.chat.id, message_id=message.message_id, text=text,
@@ -1301,7 +1416,7 @@ class Worker(threading.Thread):
         """Generate a .csv file containing the list of all transactions."""
         log.debug("Generating __transaction_file")
         # Retrieve all the transactions
-        transactions = self.session.query(db.Transaction).order_by(db.Transaction.transaction_id.asc()).all()
+        transactions = self.session.query(db.Transaction).order_by(db.Transaction.transaction_id).all()
         # Create the file if it doesn't exists
         try:
             with open(f"transactions_{self.chat.id}.csv", "x"):
@@ -1336,7 +1451,7 @@ class Worker(threading.Thread):
         # Reopen the file for reading
         with open(f"transactions_{self.chat.id}.csv") as file:
             # Send the file via a manual request to Telegram
-            requests.post(f"https://api.telegram.org/bot{configloader.config['Telegram']['token']}/sendDocument",
+            requests.post(f"https://api.telegram.org/bot{self.cfg['Telegram']['token']}/sendDocument",
                           files={"document": file},
                           params={"chat_id": self.chat.id,
                                   "parse_mode": "HTML"})
@@ -1352,12 +1467,14 @@ class Worker(threading.Thread):
         if isinstance(user, CancelSignal):
             return
         # Check if the user is already an administrator
-        admin = self.session.query(db.Admin).filter_by(user_id=user.user_id).one_or_none()
+        admin = self.session.query(db.Admin).filter_by(user=user).one_or_none()
         if admin is None:
             # Create the keyboard to be sent
-            keyboard = telegram.ReplyKeyboardMarkup([[self.loc.get("emoji_yes"), self.loc.get("emoji_no")]], one_time_keyboard=True)
+            keyboard = telegram.ReplyKeyboardMarkup([[self.loc.get("emoji_yes"), self.loc.get("emoji_no")]],
+                                                    one_time_keyboard=True)
             # Ask for confirmation
-            self.bot.send_message(self.chat.id, self.loc.get("conversation_confirm_admin_promotion"), reply_markup=keyboard)
+            self.bot.send_message(self.chat.id, self.loc.get("conversation_confirm_admin_promotion"),
+                                  reply_markup=keyboard)
             # Wait for an answer
             selection = self.__wait_for_specific_message([self.loc.get("emoji_yes"), self.loc.get("emoji_no")])
             # Proceed only if the answer is yes
@@ -1377,17 +1494,26 @@ class Worker(threading.Thread):
         while True:
             # Create the inline keyboard with the admin status
             inline_keyboard = telegram.InlineKeyboardMarkup([
-                [telegram.InlineKeyboardButton(f"{self.loc.boolmoji(admin.edit_products)} {self.loc.get('prop_edit_products')}",
-                                               callback_data="toggle_edit_products")],
-                [telegram.InlineKeyboardButton(f"{self.loc.boolmoji(admin.receive_orders)} {self.loc.get('prop_receive_orders')}",
-                                               callback_data="toggle_receive_orders")],
+                [telegram.InlineKeyboardButton(
+                    f"{self.loc.boolmoji(admin.edit_products)} {self.loc.get('prop_edit_products')}",
+                    callback_data="toggle_edit_products"
+                )],
+                [telegram.InlineKeyboardButton(
+                    f"{self.loc.boolmoji(admin.receive_orders)} {self.loc.get('prop_receive_orders')}",
+                    callback_data="toggle_receive_orders"
+                )],
                 [telegram.InlineKeyboardButton(
                     f"{self.loc.boolmoji(admin.create_transactions)} {self.loc.get('prop_create_transactions')}",
-                    callback_data="toggle_create_transactions")],
+                    callback_data="toggle_create_transactions"
+                )],
                 [telegram.InlineKeyboardButton(
                     f"{self.loc.boolmoji(admin.display_on_help)} {self.loc.get('prop_display_on_help')}",
-                    callback_data="toggle_display_on_help")],
-                [telegram.InlineKeyboardButton(self.loc.get('menu_done'), callback_data="cmd_done")]
+                    callback_data="toggle_display_on_help"
+                )],
+                [telegram.InlineKeyboardButton(
+                    self.loc.get('menu_done'),
+                    callback_data="cmd_done"
+                )]
             ])
             # Update the inline keyboard
             self.bot.edit_message_reply_markup(message_id=message.message_id,
@@ -1397,7 +1523,7 @@ class Worker(threading.Thread):
             callback = self.__wait_for_inlinekeyboard_callback()
             # Toggle the correct property
             if callback.data == "toggle_edit_products":
-                admin.edit_products = not admin.edit_products1
+                admin.edit_products = not admin.edit_products
             elif callback.data == "toggle_receive_orders":
                 admin.receive_orders = not admin.receive_orders
             elif callback.data == "toggle_create_transactions":
@@ -1414,22 +1540,38 @@ class Worker(threading.Thread):
         keyboard = []
         options: Dict[str, str] = {}
         # https://en.wikipedia.org/wiki/List_of_language_names
-        if "it" in configloader.config["Language"]["enabled_languages"]:
+        if "it" in self.cfg["Language"]["enabled_languages"]:
             lang = "🇮🇹 Italiano"
             keyboard.append([telegram.KeyboardButton(lang)])
             options[lang] = "it"
-        if "en" in configloader.config["Language"]["enabled_languages"]:
+        if "en" in self.cfg["Language"]["enabled_languages"]:
             lang = "🇬🇧 English"
             keyboard.append([telegram.KeyboardButton(lang)])
             options[lang] = "en"
-        if "ru" in configloader.config["Language"]["enabled_languages"]:
+        if "ru" in self.cfg["Language"]["enabled_languages"]:
             lang = "🇷🇺 Русский"
             keyboard.append([telegram.KeyboardButton(lang)])
             options[lang] = "ru"
-        if "uk" in configloader.config["Language"]["enabled_languages"]:
+        if "uk" in self.cfg["Language"]["enabled_languages"]:
             lang = "🇺🇦 Українська"
             keyboard.append([telegram.KeyboardButton(lang)])
             options[lang] = "uk"
+        if "zh_cn" in self.cfg["Language"]["enabled_languages"]:
+            lang = "🇨🇳 简体中文"
+            keyboard.append([telegram.KeyboardButton(lang)])
+            options[lang] = "zh_cn"
+        if "he" in self.cfg["Language"]["enabled_languages"]:
+            lang = "🇮🇱 עברית"
+            keyboard.append([telegram.KeyboardButton(lang)])
+            options[lang] = "he"
+        if "es_mx" in self.cfg["Language"]["enabled_languages"]:
+            lang = "🇲🇽 Español"
+            keyboard.append([telegram.KeyboardButton(lang)])
+            options[lang] = "es_mx"
+        if "pt_br" in self.cfg["Language"]["enabled_languages"]:
+            lang = "🇧🇷 Português"
+            keyboard.append([telegram.KeyboardButton(lang)])
+            options[lang] = "pt_br"
         # Send the previously created keyboard to the user (ensuring it can be clicked only 1 time)
         self.bot.send_message(self.chat.id,
                               self.loc.get("conversation_language_select"),
@@ -1445,14 +1587,14 @@ class Worker(threading.Thread):
 
     def __create_localization(self):
         # Check if the user's language is enabled; if it isn't, change it to the default
-        if self.user.language not in configloader.config["Language"]["enabled_languages"]:
+        if self.user.language not in self.cfg["Language"]["enabled_languages"]:
             log.debug(f"User's language '{self.user.language}' is not enabled, changing it to the default")
-            self.user.language = configloader.config["Language"]["default_language"]
+            self.user.language = self.cfg["Language"]["default_language"]
             self.session.commit()
         # Create a new Localization object
         self.loc = localization.Localization(
             language=self.user.language,
-            fallback=configloader.config["Language"]["fallback_language"],
+            fallback=self.cfg["Language"]["fallback_language"],
             replacements={
                 "user_string": str(self.user),
                 "user_mention": self.user.mention(),
@@ -1473,5 +1615,6 @@ class Worker(threading.Thread):
         # If a restart has been requested...
         # Do nothing.
         # Close the database session
+        self.session.close()
         # End the process
         sys.exit(0)
