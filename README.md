@@ -18,7 +18,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 
 	Below are instructions on how to deploy your bot to obtain a Callback URL using Ngrok or Heroku.
 
-	### Deploy using [ngrok](https://ngrok.com/download)
+	### Deploy using [Ngrok](https://ngrok.com/download)
 	* In a new terminal/cmd prompt, start the bitcoin callback listener on port 5000 `python3 -OO callback.py`
 	* In another terminal/cmd prompt, start ngrok on port 5000 `./ngrok http 5000` or `~/ngrok http 5000`
 	* Copy the Forwarding URL from ngrok.
@@ -26,7 +26,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 	* Set the HTTP Callback URL for your store on the [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/stores). Combine the Forwarding URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
 	   eg.  http://c7f7ecb92ht5.ngrok.io/callback?secret=aN32nFjf4
 
-	### Deploy using Heroku
+	### Deploy using [Heroku](https://www.heroku.com/)
 	* Test using heroku cli command: `heroku local`
 	* You will also be able to login to heroku and push your bot to heroku master to launch it into production using the following commands:
 	```
