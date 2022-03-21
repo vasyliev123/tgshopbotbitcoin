@@ -9,12 +9,9 @@ A customizable Telegram shop bot that accepts bitcoin payments. Demo at https://
 Please refer to the [main greed project fork](https://github.com/Steffo99/greed) for requirements, installation guide, and usage instructions before proceeding with the bitcoin setup below
 
 ## Integrating Bitcoin
+1. Edit the `config/config.toml` file to set your Blockonomics *api_key* from [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores), and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
 
-1. You will require a Blockonomics API Key - Complete merchant setup wizard by clicking on Get Started for Free on [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/).
-
-2. Edit the `config/config.toml` file to set your Blockonomics *api_key* from [Blockonomics Merchant Page](https://www.blockonomics.co/merchants#/stores), and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
-
-3. Set the HTTP Callback URL on the Blockonomics Merchants Page
+2. Add a new [store](https://www.blockonomics.co/merchants#/stores) and set the HTTP Callback URL
 
 	Below are instructions on how to deploy your bot to obtain a Callback URL using Ngrok or Heroku.
 
