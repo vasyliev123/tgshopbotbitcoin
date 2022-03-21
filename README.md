@@ -20,7 +20,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 	* In another terminal/cmd prompt, start ngrok on port 5000 `./ngrok http 5000` or `~/ngrok http 5000`
 	* Copy the Forwarding URL from ngrok.
 	![](assets/images/ngrok.png) 
-	* Set the HTTP Callback URL for your store on the [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/stores). Combine the Forwarding URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
+	* Set the HTTP Callback URL for your [store](https://www.blockonomics.co/merchants#/stores). Combine the Forwarding URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
 	   eg.  http://c7f7ecb92ht5.ngrok.io/callback?secret=aN32nFjf4
 
 	### Deploy using [Heroku](https://www.heroku.com/)
@@ -36,7 +36,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 	```
 	* You can now start the greed bot and blockonomics callback from the Heroku Dashboard > Resources.
 	![](assets/images/heroku.png) 
-	* Set the HTTP Callback URL for your store on the [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/stores), combine the Heroku App URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
+	* Set the HTTP Callback URL for your [store](https://www.blockonomics.co/merchants#/stores) , combine the Heroku App URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
 		eg. https://greed.herokuapp.com/callback?secret=aN32nFjf4
 
 That's it! Restart your bot and start accepting bitcoing payments with your bot!
