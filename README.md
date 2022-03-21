@@ -12,7 +12,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 
 1. You will require a Blockonomics API Key - Complete merchant setup wizard by clicking on Get Started for Free on [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/).
 
-2. Edit the config.toml file to set your Blockonomics *api_key* from Blockonomics Merchant Page, and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
+2. Edit the `config/config.toml` file to set your Blockonomics *api_key* from [Blockonomics Merchant Page](https://www.blockonomics.co/merchants#/stores), and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
 
 3. Set the HTTP Callback URL on the Blockonomics Merchants Page
 
