@@ -12,7 +12,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 
 1. You will require a Blockonomics API Key - Complete merchant setup wizard by clicking on Get Started for Free on [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/).
 
-2. Edit the config.toml file to set your Blockonomics *api_key*, and *secret* of your choosing
+2. Edit the config.toml file to set your Blockonomics *api_key* from Blockonomics Merchant Page, and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
 
 3. Set the HTTP Callback URL on the Blockonomics Merchants Page
 
@@ -41,6 +41,8 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 	![](assets/images/heroku.png) 
 	* Set the HTTP Callback URL for your store on the [Blockonomics Merchants Page](https://www.blockonomics.co/merchants#/stores), combine the Heroku App URL with `/callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 2 in place of `YOUR_SECRET`
 		eg. https://greed.herokuapp.com/callback?secret=aN32nFjf4
+
+That's it! Restart your bot and start accepting bitcoing payments with your bot!
 
 ## Credits
 This project is a fork of [greed project](https://github.com/Steffo99/greed) by @Steffo99. We would like to thank @Steffo99 for putting this in public domain. 
