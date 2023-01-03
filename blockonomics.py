@@ -57,11 +57,10 @@ class BlockonomicsPoll:
     def check_for_pending_transactions(self) -> None:
 
         pending_addresses = [o.address for o in self.session.query(db.BtcTransaction.address).filter(db.BtcTransaction.status != 2)]
-        print("Checking for addresses ", pending_addresses)
         if not pending_addresses: return
 
         response = self._get_history_for_addresses(addresses=pending_addresses)
-        print("Response: ", response)
+        
         # Update Pending Transactions
         for transaction in response.get('pending', []):
             self.handle_update(
@@ -88,10 +87,6 @@ class BlockonomicsPoll:
         body = { "addr": ", ".join(addresses) }
         headers = { "Authorization": "Bearer %s" % api_key }
 
-        print("URL: ", url)
-        print("Body: ", body)
-        print("Headers: ", headers)
-        
         r = requests.post(
             url=url,
             data=json.dumps(body),
@@ -162,7 +157,7 @@ class BlockonomicsPoll:
                 self.bot.send_message(
                     transaction.user_id, 
                     "Payment confirmed!\nYour account has been credited with %(received_float)s %(currency)s." % {
-                        "recevied_float": received_float,
+                        "received_float": received_float,
                         "currency": configloader.user_cfg["Payments"]["currency"]
                     }
                 )
