@@ -4,7 +4,6 @@ import configloader
 import flask
 import duckbot
 from blockonomics import BlockonomicsPoll
-import configloader
 import sqlalchemy
 
 # Start the bitcoin callback listener
