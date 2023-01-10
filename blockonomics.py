@@ -20,10 +20,10 @@ class Blockonomics:
         r = requests.get(url,params)
         if r.status_code == 200:
           price = r.json()['price']
-          print ('Bitcoin price ' + str(price))
+          log.debug("BTC Price %s" % price)
           return price
         else:
-          print(r.status_code, r.text)
+          log.error("Fetch BTC Price Failed, Status: %s, Response: %s" % (r.status_code, r.content))
 
     @staticmethod
     def new_address(reset=False):
@@ -35,12 +35,11 @@ class Blockonomics:
         else:
           url += "?match_callback=" + secret
         headers = {'Authorization': "Bearer " + api_key}
-        print(url)
         r = requests.post(url, headers=headers)
         if r.status_code == 200:
           return r
         else:
-          print(r.status_code, r.text)
+          log.error("New Address Generation Failed, Status: %s, Response: %s" % (r.status_code, r.content))
           return r
 
 class BlockonomicsPoll:
@@ -96,7 +95,7 @@ class BlockonomicsPoll:
         if r.status_code == 200:
             return r.json()
         else:
-          print(r.status_code, r.text)
+          log.error("Get Payments History failed, Status: %s, Response: %s" % (r.status_code, r.content))
           return {"pending": [], "history": []}
 
     def _satoshi_to_fiat(self, satoshi, transaction_price) -> float:
@@ -127,7 +126,7 @@ class BlockonomicsPoll:
             if status == 2:
                 received_float = self._satoshi_to_fiat(satoshi, transaction.price)
 
-                print ("Recieved %(received_float)s %(currency)s on address %(address)s" % {
+                log.info("Recieved %(received_float)s %(currency)s on address %(address)s" % {
                     "received_float": received_float,
                     "currency": configloader.user_cfg["Payments"]["currency"],
                     "address": address
