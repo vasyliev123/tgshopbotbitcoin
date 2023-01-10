@@ -363,10 +363,10 @@ class Worker(threading.Thread):
 
     def __send_btc_payment_info(self, address, amount):
         # Send a message containing the btc pay info
-        self.bot.send_message_markdown(self.chat.id, "To pay, send this amount:\n`" 
-                                                    + str(amount) 
-                                                    + "`\nto this bitcoin address:\n`" 
-                                                    + address + "`")
+        self.bot.send_message_markdown(
+            self.chat.id,
+            "To pay, send this amount:\n`%f`\nto this bitcoin address:\n`%s`" % (amount, address)
+        )
 
     def __wait_for_photo(self, cancellable: bool = False) -> Union[List[telegram.PhotoSize], CancelSignal]:
         """Continue getting updates until a photo is received, then return it."""
