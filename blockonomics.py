@@ -5,6 +5,7 @@ import sqlalchemy
 import datetime
 from decimal import Decimal
 import json
+import re
 
 import database as db
 
@@ -104,9 +105,15 @@ class BlockonomicsPoll:
         received_btc = satoshi/1.0e8
         received_dec = round(Decimal(received_btc * transaction_price), int(configloader.user_cfg["Payments"]["currency_exp"]))
         return float(received_dec)
+    
+    @classmethod
+    def _sanitize_address(cls, address: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9]", "", address)
 
-    def handle_update(self, address, status, satoshi, txid):
+    def handle_update(self, address, status, satoshi, txid) -> str:
         """Handles Transaction Updates"""
+        
+        address = self._sanitize_address(address)
 
         transaction = self.session.query(db.BtcTransaction).filter(db.BtcTransaction.address == address).one_or_none()
         if transaction and transaction.txid == "":
