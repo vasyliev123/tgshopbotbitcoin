@@ -33,11 +33,13 @@ class Blockonomics:
     @staticmethod
     def new_address(reset=False):
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
-        url = 'https://www.blockonomics.co/api/new_address?match_callback=' + Blockonomics._get_secret()
+        url = 'https://www.blockonomics.co/api/new_address'
+        params = {}
         if reset == True:
-          url += '&reset=1'
+          params['reset'] = 1
+        
         headers = {'Authorization': "Bearer " + api_key}
-        r = requests.post(url, headers=headers)
+        r = requests.post(url, headers=headers, params={**params, "match_callback": Blockonomics._get_secret()})
         if r.status_code == 200:
           return r
         else:
