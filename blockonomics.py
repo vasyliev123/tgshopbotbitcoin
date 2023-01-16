@@ -25,16 +25,17 @@ class Blockonomics:
           return price
         else:
           log.error("Fetch BTC Price Failed, Status: %s, Response: %s" % (r.status_code, r.content))
+    
+    @staticmethod
+    def _get_secret():
+        return configloader.user_cfg["Bitcoin"]["secret"]
 
     @staticmethod
     def new_address(reset=False):
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
-        secret = configloader.user_cfg["Bitcoin"]["secret"]
-        url = 'https://www.blockonomics.co/api/new_address'
+        url = 'https://www.blockonomics.co/api/new_address?match_callback=' + Blockonomics._get_secret()
         if reset == True:
-          url += '?match_callback='+secret+'&reset=1'
-        else:
-          url += "?match_callback=" + secret
+          url += '&reset=1'
         headers = {'Authorization': "Bearer " + api_key}
         r = requests.post(url, headers=headers)
         if r.status_code == 200:
