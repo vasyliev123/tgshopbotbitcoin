@@ -40,7 +40,7 @@ class Blockonomics:
         if r.status_code == 200:
           return r
         else:
-          log.error("New Address Generation Failed, Status: %s, Response: %s" % (r.status_code, r.content))
+          log.error("New Address Generation Failed, Status: %s, Response: %s" % (r.status_code, r.content), exc_info=False)
           return r
 
 class BlockonomicsPoll:
