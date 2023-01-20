@@ -12,6 +12,8 @@ import localization
 import nuconfig
 import worker
 
+from blockonomics import BlockonomicsPoll
+
 try:
     import coloredlogs
 except ImportError:
@@ -223,6 +225,9 @@ def main():
             # Mark them as read by increasing the update_offset
             next_update = updates[-1].update_id + 1
 
+        # Check for Transaction Updates
+        log.debug(f"Checking for Transaction Updates from Blockonomics")
+        BlockonomicsPoll(bot=bot, engine=engine).check_for_pending_transactions()
 
 # Run the main function only in the main process
 if __name__ == "__main__":
