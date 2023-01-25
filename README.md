@@ -10,7 +10,7 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 
 ## Integrating Bitcoin
 
-1. Add a new store at [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores), you can leave HTTP callback URL blank. Ignore this setup if you already have a store setup to use for the bot.
+1. Add a new store at [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores), you can leave HTTP callback URL as empty
 
 2. Edit the `config/config.toml` file to set your Blockonomics *api_key* from [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores) (Same page as above)
 
