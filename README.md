@@ -10,7 +10,14 @@ Please refer to the [main greed project fork](https://github.com/Steffo99/greed)
 
 ## Integrating Bitcoin
 
-1. Edit the `config/config.toml` file to set your Blockonomics *api_key* from [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores), and a *secret* of your choosing, you'll use this secret while setting up the Callback URL below.
+1. Edit the `config/config.toml` file to set the below settings
+```[Bitcoin]
+# Blockonomics API key
+api_key = "BLOCKONOMICS_API_KEY"
+secret = "YOUR_SECRET"
+```
+- *api_key* can be obtained by signing up on [Blockonomics Merchants](https://www.blockonomics.co/merchants#/stores) and navigating to  > [Stores](https://www.blockonomics.co/merchants#/stores), 
+- *secret* can be any long phrase of your choice like *GreedBtc9123*
 
 2. Add a new store at [Blockonomics Merchants > Stores](https://www.blockonomics.co/merchants#/stores), and set your Callback URL to `https://www.blockonomics.co/api/test_callback?secret=YOUR_SECRET`, substituting in your chosen secret from step 1 in place of `YOUR_SECRET`
 
