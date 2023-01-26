@@ -23,5 +23,9 @@ secret = "YOUR_SECRET"
 
 That's it! Restart your bot and start accepting bitcoin payments with your bot!
 
+## Screenshots
+![Greed Screenshots](https://user-images.githubusercontent.com/22245433/214773115-59db13a8-93cc-4d12-ab3c-4676e60784a0.png)
+
+
 ## Credits
 This project is a fork of [greed project](https://github.com/Steffo99/greed) by @Steffo99. We would like to thank @Steffo99 for putting this in public domain. 
