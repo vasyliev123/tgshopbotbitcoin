@@ -38,11 +38,11 @@ jobs:
         uses: docker/build-push-action@v3.2.0
         with:
           tags: >-
-            ghcr.io/steffo99/greed:${{ steps.semver.outputs.precedence }},
-            ghcr.io/steffo99/greed:${{ steps.semver.outputs.core }},
-            ghcr.io/steffo99/greed:${{ steps.semver.outputs.pair }},
-            ghcr.io/steffo99/greed:${{ steps.semver.outputs.major }},
-            ghcr.io/steffo99/greed:latest
+            ghcr.io/darrenwestwood/greed:${{ steps.semver.outputs.precedence }},
+            ghcr.io/darrenwestwood/greed:${{ steps.semver.outputs.core }},
+            ghcr.io/darrenwestwood/greed:${{ steps.semver.outputs.pair }},
+            ghcr.io/darrenwestwood/greed:${{ steps.semver.outputs.major }},
+            ghcr.io/darrenwestwood/greed:latest
           platforms: >-
             linux/amd64
           push: true
