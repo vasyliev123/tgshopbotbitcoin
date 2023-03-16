@@ -1,8 +1,6 @@
 # Strings / localization file for greed
 # Can be edited, but DON'T REMOVE THE REPLACEMENT FIELDS (words surrounded by {curly braces})
 
-# Part of the translation by https://github.com/DarrenWestwood
-
 # Currency symbol
 currency_symbol = "R$"
 
@@ -245,6 +243,9 @@ text_completed = "completo"
 # Text: refunded order
 text_refunded = "devolvido"
 
+# Text: product not for sale
+text_not_for_sale = "Não está a venda"
+
 # Add product: name?
 ask_product_name = "Qual deve ser o nome do produto?"
 
@@ -372,7 +373,7 @@ contact_shopkeeper = "Atualmente, a equipe disponível para prestar atendimento 
 # Success: product has been added/edited to the database
 success_product_edited = "✅ O produto foi adicionado / modificado com sucesso!"
 
-# Success: product has been added/edited to the database
+# Success: product has been marked as deleted in the database
 success_product_deleted = "✅ O produto foi excluído com sucesso!"
 
 # Success: order has been created

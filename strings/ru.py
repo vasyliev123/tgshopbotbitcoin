@@ -1,8 +1,6 @@
 # Strings / localization file for greed
 # Can be edited, but DON'T REMOVE THE REPLACEMENT FIELDS (words surrounded by {curly braces})
 
-# Part of the translation by https://github.com/pzhuk
-
 # Currency symbol
 currency_symbol = "₽"
 
@@ -214,7 +212,7 @@ menu_csv = "📄 .csv"
 menu_edit_admins = "🏵 Изменить менеджеров"
 
 # Menu: language
-menu_language = "🇷🇺 Русский"
+menu_language = "🇷🇺 Язык"
 
 # Emoji: unprocessed order
 emoji_not_processed = "*️⃣"
@@ -239,6 +237,9 @@ text_completed = "выполнен"
 
 # Text: refunded order
 text_refunded = "возмещен"
+
+# Text: product not for sale
+text_not_for_sale = "Не продаётся"
 
 # Add product: name?
 ask_product_name = "Как назовем продукт?"
@@ -369,7 +370,7 @@ contact_shopkeeper = "Следующие сотрудники доступны �
 # Success: product has been added/edited to the database
 success_product_edited = "✅ Продукт успешно создан/обновлен!"
 
-# Success: product has been added/edited to the database
+# Success: product has been marked as deleted in the database
 success_product_deleted = "✅ Продукт успешно удален!"
 
 # Success: order has been created

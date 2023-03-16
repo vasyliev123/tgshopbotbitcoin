@@ -239,6 +239,9 @@ text_completed = "הסתיים"
 # Text: refunded order
 text_refunded = "כסף הוחזר"
 
+# Text: product not for sale
+text_not_for_sale = "לא למכירה"
+
 # Add product: name?
 ask_product_name = "איזה שם תרצה לתת למוצר?"
 
@@ -366,7 +369,7 @@ contact_shopkeeper = "המשתמשים שיכולים לספק תמיכה הם\n
 # Success: product has been added/edited to the database
 success_product_edited = "✅ מוצר זה השתנה בהצלחה!"
 
-# Success: product has been added/edited to the database
+# Success: product has been marked as deleted in the database
 success_product_deleted = "✅ מוצר זה נמחק בהצלחה"
 
 # Success: order has been created
