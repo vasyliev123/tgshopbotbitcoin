@@ -83,6 +83,38 @@ class BlockonomicsPoll:
             )
 
     def _get_history_for_addresses(self, addresses: list) -> dict:
+
+        debug = configloader.user_cfg["Bitcoin"].get('debug', False)
+        log.error('DEBUG  %s' % debug)
+        if debug:
+            return self._get_history_for_addresses_via_logs(addresses)
+        else:
+            return self._get_history_for_addresses_via_history(addresses)
+
+    def _get_history_for_addresses_via_logs(self, addresses: list) -> dict:
+
+        api_key = configloader.user_cfg["Bitcoin"]["api_key"]
+
+        url = "https://www.blockonomics.co/api/merchant_logs"
+        body = { "addr": ", ".join(addresses) }
+        headers = { "Authorization": "Bearer %s" % api_key }
+
+        r = requests.get(
+            url=url,
+            params=json.dumps(body),
+            headers=headers
+        )
+
+        if r.status_code == 200:
+            data = r.json()
+            print(data)
+            # TBD: Implement/Convert Data to the same format as search history API once the Merchant Logs API is ready to filter by addresses
+            return {"pending": [], "history": []}
+        else:
+          log.error("Get Payments History failed [DEBUG MODE], Status: %s, Response: %s" % (r.status_code, r.content))
+          return {"pending": [], "history": []}
+
+    def _get_history_for_addresses_via_history(self, addresses: list) -> dict:
         
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
 
