@@ -117,4 +117,3 @@ level = "INFO"
 # Blockonomics API key
 api_key = "BLOCKONOMICS_API_KEY"
 secret = "YOUR_SECRET"
-debug = true
