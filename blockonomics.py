@@ -78,7 +78,7 @@ class BlockonomicsPoll:
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
 
         url = "https://www.blockonomics.co/api/merchant_logs"
-        body = { "addr": ", ".join(addresses) }
+        body = {"addr": ", ".join(addresses), "transactions_only": True}
         headers = { "Authorization": "Bearer %s" % api_key }
 
         r = requests.get(
@@ -102,10 +102,11 @@ class BlockonomicsPoll:
                         'value': int(query_params['value'][0]),
                         'txid': query_params['txid'][0]
                     })
+
     
             return formatted_data
         else:
-          log.error("Get Payments History failed [DEBUG MODE], Status: %s, Response: %s" % (r.status_code, r.content))
+          log.error("Get Payments History failed , Status: %s, Response: %s" % (r.status_code, r.content))
           return {"logs": []}
 
 
