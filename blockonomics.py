@@ -106,7 +106,7 @@ class BlockonomicsPoll:
     
             return formatted_data
         else:
-          log.error("Get Payments History failed , Status: %s, Response: %s" % (r.status_code, r.content))
+          log.error("Get Payments History failed, Status: %s, Response: %s" % (r.status_code, r.content))
           return {"logs": []}
 
 
