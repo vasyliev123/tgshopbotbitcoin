@@ -78,12 +78,12 @@ class BlockonomicsPoll:
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
 
         url = "https://www.blockonomics.co/api/merchant_logs"
-        body = {"addr": ", ".join(addresses), "transactions_only": True}
+        body = {"match_callback": f"https://www.blockonomics.co/api/test_callback?secret={Blockonomics._get_secret()}"}
         headers = { "Authorization": "Bearer %s" % api_key }
 
         r = requests.get(
             url=url,
-            params=json.dumps(body),
+            params=body,
             headers=headers
         )
 
