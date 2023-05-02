@@ -65,7 +65,7 @@ class BlockonomicsPoll:
 
         response = self._get_history_for_addresses(addresses=pending_addresses)
         
-        # Update Transactions fro logs
+        # Update Transactions for logs
         for transaction in response.get('logs', []):
             self.handle_update(
                 address=transaction['addr'][0],
