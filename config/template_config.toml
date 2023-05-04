@@ -5,7 +5,7 @@
 # Available languages:
 # it - Italian, by https://github.com/Steffo99
 # en - English, by https://github.com/DarrenWestwood
-# uk - Ukrainian, by https://github.com/pzhuk
+# uk - Ukrainian, by https://github.com/pzhuk and https://github.com/Trentyn
 # ru - Russian, by https://github.com/pzhuk
 # zh_cn - Simplified Chinese, by https://github.com/zhihuiyuze
 # he - Hebrew, by https://github.com/netanelkoli
@@ -24,6 +24,7 @@ fallback_language = "en"
 [Database]
 # The database engine you want to use.
 # Refer to http://docs.sqlalchemy.org/en/latest/core/engines.html for the possible settings.
+# This value is ignored if you're running greed via Docker, or if the DB_ENGINE environment variable is set.
 engine = "sqlite:///database.sqlite"
 
 
@@ -56,11 +57,20 @@ currency_exp = 2
 currency_symbol = "€"
 
 
+# Cash payment settings
+[Payments.Cash]
+# Display the "With cash" option in the Add Credit menu
+enable_pay_with_cash = true
+# Display the "Create transaction" option in the Manager menu
+enable_create_transaction = true
+# Customize the cash payment text in the strings files!
+
+
 # Credit card payment settings
 [Payments.CreditCard]
 # Telegram Payments provider token obtainable at https://t.me/BotFather in the bot's Payments menu
 # If empty, credit card payments are disabled.
-# credit_card_token =
+# credit_card_token = ""
 credit_card_token = "123456789:YOUR_TOKEN_HERE_"
 # Minimum wallet payment accepted (in miniumum currency units, $1.00 = 100 units)
 min_amount = 1000

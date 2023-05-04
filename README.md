@@ -28,4 +28,4 @@ That's it! Restart your bot and start accepting bitcoin payments with your bot!
 
 
 ## Credits
-This project is a fork of [greed project](https://github.com/Steffo99/greed) by @Steffo99. We would like to thank @Steffo99 for putting this in public domain. 
+This project is a fork of [greed project](https://github.com/Steffo99/greed) by @Steffo99. We would like to thank @Steffo99 for putting this in public domain.

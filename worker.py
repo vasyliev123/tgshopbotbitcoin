@@ -515,7 +515,7 @@ class Worker(threading.Thread):
             # Send the message without the keyboard to get the message id
             message = product.send_as_message(w=self, chat_id=self.chat.id)
             # Add the product to the cart
-            cart[message['result']['message_id']] = [product, 0]
+            cart[message['message_id']] = [product, 0]
             # Create the inline keyboard to add the product to the cart
             inline_keyboard = telegram.InlineKeyboardMarkup(
                 [[telegram.InlineKeyboardButton(self.loc.get("menu_add_to_cart"), callback_data="cart_add")]]
@@ -523,12 +523,12 @@ class Worker(threading.Thread):
             # Edit the sent message and add the inline keyboard
             if product.image is None:
                 self.bot.edit_message_text(chat_id=self.chat.id,
-                                           message_id=message['result']['message_id'],
+                                           message_id=message['message_id'],
                                            text=product.text(w=self),
                                            reply_markup=inline_keyboard)
             else:
                 self.bot.edit_message_caption(chat_id=self.chat.id,
-                                              message_id=message['result']['message_id'],
+                                              message_id=message['message_id'],
                                               caption=product.text(w=self),
                                               reply_markup=inline_keyboard)
         # Create the keyboard with the cancel button
@@ -757,7 +757,8 @@ class Worker(threading.Thread):
         keyboard = list()
         # Add the supported payment methods to the keyboard
         # Cash
-        keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cash"))])
+        if self.cfg["Payments"]["Cash"]["enable_pay_with_cash"]:
+            keyboard.append([telegram.KeyboardButton(self.loc.get("menu_cash"))])
         # Telegram Payments
         if self.cfg["Payments"]["CreditCard"]["credit_card_token"] != "":
             keyboard.append([telegram.KeyboardButton(self.loc.get("menu_credit_card"))])
@@ -774,12 +775,12 @@ class Worker(threading.Thread):
             [self.loc.get("menu_cash"), self.loc.get("menu_credit_card"), "🛡 Bitcoin", self.loc.get("menu_cancel")],
             cancellable=True)
         # If the user has selected the Cash option...
-        if selection == self.loc.get("menu_cash"):
+        if selection == self.loc.get("menu_cash") and self.cfg["Payments"]["Cash"]["enable_pay_with_cash"]:
             # Go to the pay with cash function
             self.bot.send_message(self.chat.id,
                                   self.loc.get("payment_cash", user_cash_id=self.user.identifiable_str()))
         # If the user has selected the Credit Card option...
-        elif selection == self.loc.get("menu_credit_card"):
+        elif selection == self.loc.get("menu_credit_card") and self.cfg["Payments"]["CreditCard"]["credit_card_token"]:
             # Go to the pay with credit card function
             self.__add_credit_cc()
         # If the user has selected the Bitcoin option...
@@ -980,7 +981,8 @@ class Worker(threading.Thread):
             if self.admin.receive_orders:
                 keyboard.append([self.loc.get("menu_orders")])
             if self.admin.create_transactions:
-                keyboard.append([self.loc.get("menu_edit_credit")])
+                if self.cfg["Payments"]["Cash"]["enable_create_transaction"]:
+                    keyboard.append([self.loc.get("menu_edit_credit")])
                 keyboard.append([self.loc.get("menu_transactions"), self.loc.get("menu_csv")])
             if self.admin.is_owner:
                 keyboard.append([self.loc.get("menu_edit_admins")])
@@ -996,34 +998,34 @@ class Worker(threading.Thread):
                                                           self.loc.get("menu_transactions"),
                                                           self.loc.get("menu_csv"),
                                                           self.loc.get("menu_edit_admins")])
-            # If the user has selected the Products option...
-            if selection == self.loc.get("menu_products"):
+            # If the user has selected the Products option and has the privileges to perform the action...
+            if selection == self.loc.get("menu_products") and self.admin.edit_products:
                 # Open the products menu
                 self.__products_menu()
-            # If the user has selected the Orders option...
-            elif selection == self.loc.get("menu_orders"):
+            # If the user has selected the Orders option and has the privileges to perform the action...
+            elif selection == self.loc.get("menu_orders") and self.admin.receive_orders:
                 # Open the orders menu
                 self.__orders_menu()
-            # If the user has selected the Transactions option...
-            elif selection == self.loc.get("menu_edit_credit"):
+            # If the user has selected the Transactions option and has the privileges to perform the action...
+            elif selection == self.loc.get("menu_edit_credit") and self.admin.create_transactions:
                 # Open the edit credit menu
                 self.__create_transaction()
-            # If the user has selected the User mode option...
+            # If the user has selected the User mode option and has the privileges to perform the action...
             elif selection == self.loc.get("menu_user_mode"):
                 # Tell the user how to go back to admin menu
                 self.bot.send_message(self.chat.id, self.loc.get("conversation_switch_to_user_mode"))
                 # Start the bot in user mode
                 self.__user_menu()
-            # If the user has selected the Add Admin option...
-            elif selection == self.loc.get("menu_edit_admins"):
+            # If the user has selected the Add Admin option and has the privileges to perform the action...
+            elif selection == self.loc.get("menu_edit_admins") and self.admin.is_owner:
                 # Open the edit admin menu
                 self.__add_admin()
-            # If the user has selected the Transactions option...
-            elif selection == self.loc.get("menu_transactions"):
+            # If the user has selected the Transactions option and has the privileges to perform the action...
+            elif selection == self.loc.get("menu_transactions") and self.admin.create_transactions:
                 # Open the transaction pages
                 self.__transaction_pages()
-            # If the user has selected the .csv option...
-            elif selection == self.loc.get("menu_csv"):
+            # If the user has selected the .csv option and has the privileges to perform the action...
+            elif selection == self.loc.get("menu_csv") and self.admin.create_transactions:
                 # Generate the .csv file
                 self.__transactions_file()
 
@@ -1100,11 +1102,15 @@ class Worker(threading.Thread):
                               self.loc.get("ask_product_price"))
         # Display the current name if you're editing an existing product
         if product:
-            self.bot.send_message(self.chat.id,
-                                  self.loc.get("edit_current_value",
-                                               value=(str(self.Price(product.price))
-                                                      if product.price is not None else 'Non in vendita')),
-                                  reply_markup=cancel)
+            if product.price is not None:
+                value_text = str(self.Price(product.price))
+            else:
+                value_text = self.loc.get("text_not_for_sale")
+            self.bot.send_message(
+                self.chat.id,
+                self.loc.get("edit_current_value", value=value_text),
+                reply_markup=cancel
+            )
         # Wait for an answer
         price = self.__wait_for_regex(r"([0-9]+(?:[.,][0-9]{1,2})?|[Xx])",
                                       cancellable=True)
@@ -1417,12 +1423,6 @@ class Worker(threading.Thread):
         log.debug("Generating __transaction_file")
         # Retrieve all the transactions
         transactions = self.session.query(db.Transaction).order_by(db.Transaction.transaction_id).all()
-        # Create the file if it doesn't exists
-        try:
-            with open(f"transactions_{self.chat.id}.csv", "x"):
-                pass
-        except IOError:
-            pass
         # Write on the previously created file
         with open(f"transactions_{self.chat.id}.csv", "w") as file:
             # Write an header line
