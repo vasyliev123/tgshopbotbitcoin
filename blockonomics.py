@@ -6,6 +6,7 @@ import datetime
 from decimal import Decimal
 import json
 import re
+from urllib.parse import parse_qs, urlparse
 
 import database as db
 
@@ -64,8 +65,8 @@ class BlockonomicsPoll:
 
         response = self._get_history_for_addresses(addresses=pending_addresses)
         
-        # Update Pending Transactions
-        for transaction in response.get('pending', []):
+        # Update Transactions for logs
+        for transaction in response.get('logs', []):
             self.handle_update(
                 address=transaction['addr'][0],
                 status=transaction['status'],
@@ -73,34 +74,41 @@ class BlockonomicsPoll:
                 txid=transaction['txid']
             )
 
-        # Update Confirmed Transactions
-        for transaction in response.get('history', []):
-            self.handle_update(
-                address=transaction['addr'][0],
-                status=2,
-                satoshi=transaction['value'],
-                txid=transaction['txid']
-            )
-
     def _get_history_for_addresses(self, addresses: list) -> dict:
-        
         api_key = configloader.user_cfg["Bitcoin"]["api_key"]
 
-        url = "https://www.blockonomics.co/api/searchhistory"
-        body = { "addr": ", ".join(addresses) }
+        url = "https://www.blockonomics.co/api/merchant_logs"
+        body = {"match_callback": f"https://www.blockonomics.co/api/test_callback?secret={Blockonomics._get_secret()}"}
         headers = { "Authorization": "Bearer %s" % api_key }
 
-        r = requests.post(
+        r = requests.get(
             url=url,
-            data=json.dumps(body),
+            params=body,
             headers=headers
         )
 
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            formatted_data = {"logs": []}
+
+            for transaction in data:
+                parsed_url = urlparse(transaction['url'])
+                query_params = parse_qs(parsed_url.query)
+
+                if 'addr' in query_params and 'status' in query_params and 'txid' in query_params and 'value' in query_params:
+                    formatted_data['logs'].append({
+                        'addr': [query_params['addr'][0]],
+                        'status': int(query_params['status'][0]),
+                        'value': int(query_params['value'][0]),
+                        'txid': query_params['txid'][0]
+                    })
+
+    
+            return formatted_data
         else:
           log.error("Get Payments History failed, Status: %s, Response: %s" % (r.status_code, r.content))
-          return {"pending": [], "history": []}
+          return {"logs": []}
+
 
     def _satoshi_to_fiat(self, satoshi, transaction_price) -> float:
         """Convert satoshi to fiat"""
