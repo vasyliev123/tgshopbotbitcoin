@@ -365,7 +365,7 @@ class Worker(threading.Thread):
         # Send a message containing the btc pay info
         self.bot.send_message_markdown(
             self.chat.id,
-            "To pay, send this amount:\n`%f`\nto this bitcoin address:\n`%s`" % (amount, address)
+            "To pay, send this amount:\n`{}`\nto this bitcoin address:\n`{}`".format(str(amount), address)
         )
 
     def __wait_for_photo(self, cancellable: bool = False) -> Union[List[telegram.PhotoSize], CancelSignal]:
