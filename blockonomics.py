@@ -60,7 +60,12 @@ class BlockonomicsPoll:
 
     def check_for_pending_transactions(self) -> None:
 
-        pending_addresses = [o.address for o in self.session.query(db.BtcTransaction.address).filter(db.BtcTransaction.status != 2)]
+        current_time = datetime.datetime.now()
+        one_week_ago = current_time - datetime.timedelta(days=7)
+
+        pending_addresses = [o.address for o in self.session.query(db.BtcTransaction.address).\
+                             filter(db.BtcTransaction.status != 2,
+                                    db.BtcTransaction.timestamp > one_week_ago)]
         if not pending_addresses: return
 
         response = self._get_history_for_addresses(addresses=pending_addresses)
